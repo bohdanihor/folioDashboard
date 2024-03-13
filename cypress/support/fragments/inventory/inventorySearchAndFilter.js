@@ -1,0 +1,1053 @@
+import { HTML, including, matching } from '@interactors/html';
+import {
+  Accordion,
+  Button,
+  Checkbox,
+  DropdownMenu,
+  Form,
+  KeyValue,
+  MultiColumnList,
+  MultiColumnListCell,
+  MultiColumnListHeader,
+  MultiColumnListRow,
+  MultiSelect,
+  MultiSelectOption,
+  Pane,
+  PaneHeader,
+  SearchField,
+  Section,
+  Select,
+  TextArea,
+  TextField,
+} from '../../../../interactors';
+import { BROWSE_CALL_NUMBER_OPTIONS } from '../../constants';
+import DateTools from '../../utils/dateTools';
+import logsViewAll from '../data_import/logs/logsViewAll';
+import InventoryActions from './inventoryActions';
+import InventoryInstance from './inventoryInstance';
+import InventoryInstances from './inventoryInstances';
+
+const ONE_SECOND = 1000;
+const searchAndFilterSection = Pane({ id: 'browse-inventory-filters-pane' });
+const effectiveLocationInput = Accordion({ id: 'effectiveLocation' });
+const sourceAccordion = Accordion('Source');
+const sharedAccordion = Accordion({ id: 'shared' });
+const languageInput = Accordion({ id: 'language' });
+const resourceTypeAccordion = Accordion({ id: 'resource' });
+const formatAccordion = Accordion({ id: 'format' });
+const modeOfIssuanceAccordion = Accordion({ id: 'mode' });
+const natureOfContentAccordion = Accordion({ id: 'natureOfContent' });
+const stuffSupressAccordion = Accordion({ id: 'staffSuppress' });
+const supressFromDiscoveryAccordion = Accordion({ id: 'instancesDiscoverySuppress' });
+const statisticalCodeAccordionInstanceToggle = Accordion({ id: 'statisticalCodeIds' });
+const dateCreatedAccordion = Accordion({ id: 'createdDate' });
+const dateUpdatedAccordion = Accordion({ id: 'updatedDate' });
+const instanceStatusAccordion = Accordion({ id: 'instanceStatus' });
+const tagsAccordion = Accordion({ id: 'instancesTags' });
+const keywordInput = TextArea({ id: 'input-inventory-search' });
+const searchButton = Button({ type: 'submit' });
+const inventorySearchAndFilter = TextArea({ id: 'input-inventory-search' });
+const inventorySearchAndFilterInput = Select({
+  id: 'input-inventory-search-qindex',
+});
+const browseSearchAndFilterInput = Select({ id: 'input-record-search-qindex' });
+const browseSearchInputField = TextArea({ id: 'input-record-search' });
+const browseResultList = MultiColumnList({ id: 'browse-results-list-callNumbers' });
+const resetAllButton = Button({ id: 'clickable-reset-all' });
+const resetAllBtn = Button('Reset all');
+const navigationInstancesButton = Button({
+  id: 'segment-navigation-instances',
+});
+const paneFilterSection = Section({ id: 'pane-filter' });
+const paneResultsSection = Section({ id: 'pane-results' });
+const instanceDetailsSection = Section({ id: 'pane-instancedetails' });
+const instancesTagsSection = Section({ id: including('Tags') });
+const tagsPane = Pane('Tags');
+const tagsButton = Button({ id: 'clickable-show-tags' });
+const tagsAccordionButton = instancesTagsSection.find(Button('Tags'));
+const emptyResultsMessage = 'Choose a filter or enter a search query to show results.';
+const browseButton = Button({ id: 'mode-navigation-browse' });
+const viewHoldingButton = Button('View holdings');
+const statisticalCodeAccordion = Accordion({ id: 'itemsStatisticalCodeIds' });
+const holdingsPermanentLocationAccordion = Accordion({
+  id: 'holdingsPermanentLocation',
+});
+const callNumberBrowsePane = Pane({ title: 'Browse inventory' });
+const actionsButton = Button('Actions');
+const editInstanceButton = Button('Edit instance');
+const inventorySearchResultsPane = Section({ id: 'browse-inventory-results-pane' });
+const nextButton = Button({ id: 'browse-results-list-callNumbers-next-paging-button' });
+const listInventoryNextPagingButton = Button({ id: 'list-inventory-next-paging-button' });
+const previousButton = Button({ id: 'browse-results-list-callNumbers-prev-paging-button' });
+const listInventoryPreviousPagingButton = Button({ id: 'list-inventory-prev-paging-button' });
+const instancesList = paneResultsSection.find(MultiColumnList({ id: 'list-inventory' }));
+
+const searchToggleButton = Button({ id: 'mode-navigation-search' });
+const itemStatusSearchField = TextField('itemStatus-field');
+const holdingsToggleButton = Button({ id: 'segment-navigation-holdings' });
+const itemToggleButton = Button({ id: 'segment-navigation-items' });
+const searchTypeDropdown = Select('Search field index');
+const nameTypeAccordion = Accordion({ id: 'nameType' });
+
+const searchInstanceByHRID = (id) => {
+  cy.do([
+    Select({ id: 'input-inventory-search-qindex' }).choose('Instance HRID'),
+    TextArea({ id: 'input-inventory-search' }).fillIn(id),
+    searchButton.click(),
+  ]);
+};
+
+const searchHoldingsByHRID = (hrid) => {
+  cy.do([
+    Select({ id: 'input-inventory-search-qindex' }).choose('Holdings HRID'),
+    TextArea({ id: 'input-inventory-search' }).fillIn(hrid),
+    searchButton.click(),
+  ]);
+  InventoryInstances.waitLoading();
+};
+
+const searchInstanceByTitle = (title) => {
+  cy.do([TextArea({ id: 'input-inventory-search' }).fillIn(title), searchButton.click()]);
+  InventoryInstance.waitInventoryLoading();
+
+  return InventoryInstance;
+};
+
+const getInstanceHRID = () => {
+  return logsViewAll
+    .getSingleJobProfile() // get the first job id from job logs list
+    .then(({ id }) => {
+      // then, make request with the job id
+      // and get the only record id inside the uploaded file
+      const queryString = 'limit=1000&order=asc';
+      return cy
+        .request({
+          method: 'GET',
+          url: `${Cypress.env('OKAPI_HOST')}/metadata-provider/jobLogEntries/${id}?${queryString}`,
+          headers: {
+            'x-okapi-tenant': Cypress.env('OKAPI_TENANT'),
+            'x-okapi-token': Cypress.env('token'),
+          },
+        })
+        .then(({ body: { entries } }) => {
+          // then, make request with the job id and the record id
+          // and get Instance HRID
+          const recordId = entries[0].sourceRecordId;
+          return cy
+            .request({
+              method: 'GET',
+              url: `${Cypress.env(
+                'OKAPI_HOST',
+              )}/metadata-provider/jobLogEntries/${id}/records/${recordId}`,
+              headers: {
+                'x-okapi-tenant': Cypress.env('OKAPI_TENANT'),
+                'x-okapi-token': Cypress.env('token'),
+              },
+            })
+            .then(({ body: { relatedInstanceInfo } }) => {
+              return relatedInstanceInfo.hridList;
+            });
+        });
+    });
+};
+
+const checkInstanceDetails = () => {
+  // when creating mapping profile we choose status cataloged date as today
+  // in inventory, it will be in YYYY-MM-DD format
+  const expectedCatalogedDate = DateTools.getFormattedDate({
+    date: new Date(),
+  });
+  // when creating mapping profile we choose instance status term as "Batch Loaded"
+  // in inventory, this will be "batch" for status code and "Batch Loaded" for status term
+  const expectedStatusTerm = 'Batch Loaded';
+  const expectedStatusCode = 'batch';
+
+  cy.do(
+    Pane({ id: 'pane-results' })
+      .find(MultiColumnListCell({ row: 0, columnIndex: 1 }))
+      .click(),
+  );
+  const catalogedDate = KeyValue('Cataloged date');
+  const instanceStatusTerm = KeyValue('Instance status term');
+  const instanceStatusCode = KeyValue('Instance status code');
+
+  cy.expect(catalogedDate.has({ value: expectedCatalogedDate }));
+  cy.expect(instanceStatusTerm.has({ value: expectedStatusTerm }));
+  cy.expect(instanceStatusCode.has({ value: expectedStatusCode }));
+};
+
+export default {
+  searchInstanceByHRID,
+  searchHoldingsByHRID,
+  searchInstanceByTitle,
+  getInstanceHRID,
+  checkInstanceDetails,
+  getAllSearchResults: () => MultiColumnList(),
+  getSearchResult: (row = 0, col = 0) => paneResultsSection.find(MultiColumnListCell({ row, columnIndex: col })),
+  waitLoading: () => cy.expect([Form().find(inventorySearchAndFilter).exists()]),
+  browseCallNumberIsAbsent: () => cy.expect(HTML('Browse call numbers').absent()),
+  browseSubjectIsAbsent: () => cy.expect(HTML('Browse subjects').absent()),
+
+  effectiveLocation: {
+    mainLibrary: { id: 'clickable-filter-effectiveLocation-main-library' },
+  },
+
+  language: {
+    eng: { id: 'clickable-filter-language-english' },
+  },
+
+  selectResultCheckboxes(count) {
+    const clickActions = [];
+    for (let i = 0; i < count; i++) {
+      clickActions.push(this.getSearchResult(i).find(Checkbox()).click());
+    }
+    return cy.do(clickActions);
+  },
+
+  selectSearchResultItem(indexRow = 0) {
+    cy.do(this.getSearchResult(indexRow, 0).click());
+    // must wait page render
+    cy.wait(2000);
+  },
+  clickSearchResultItem(indexRow = 8) {
+    cy.do(this.getSearchResult(indexRow, 0).click());
+  },
+
+  verifyNumberOfSearchResults(expectedNumber) {
+    cy.expect(instancesList.has({ rowCount: expectedNumber }));
+  },
+
+  byEffectiveLocation(values) {
+    cy.do(effectiveLocationInput.clickHeader());
+    // wait to avoid robotic clicks
+    cy.wait(2000);
+    cy.do(
+      effectiveLocationInput.find(Checkbox(values ?? this.effectiveLocation.mainLibrary)).click(),
+    );
+    cy.expect(
+      effectiveLocationInput
+        .find(Checkbox(values ?? this.effectiveLocation.mainLibrary))
+        .has({ checked: true }),
+    );
+  },
+
+  byLanguage(lang) {
+    // lang: language object. Example: language.eng
+    return cy.do([
+      languageInput.clickHeader(),
+      languageInput.find(Checkbox(lang ?? this.language.eng)).click(),
+    ]);
+  },
+
+  bySource(source) {
+    cy.do([sourceAccordion.clickHeader(), sourceAccordion.find(Checkbox(source)).click()]);
+    cy.expect(MultiColumnListRow().exists());
+  },
+
+  byShared(condititon) {
+    cy.wait(1000);
+    cy.do(sharedAccordion.clickHeader());
+    if (condititon === 'Yes') {
+      cy.do(sharedAccordion.find(Checkbox({ id: 'clickable-filter-shared-true' })).click());
+    } else {
+      cy.do(sharedAccordion.find(Checkbox({ id: 'clickable-filter-shared-false' })).click());
+    }
+  },
+
+  byKeywords(kw = '*') {
+    cy.do([keywordInput.fillIn(kw), searchButton.click()]);
+    cy.expect(MultiColumnListRow().exists());
+  },
+
+  selectBrowseCallNumbers() {
+    this.switchToBrowseTab();
+    // cypress can't draw selected option without wait
+    // eslint-disable-next-line cypress/no-unnecessary-waiting
+    cy.wait(ONE_SECOND);
+    cy.do(Select('Search field index').choose('Call numbers (all)'));
+    cy.expect(effectiveLocationInput.exists());
+  },
+
+  selectBrowseSubjects() {
+    this.switchToBrowseTab();
+    // cypress can't draw selected option without wait
+    // eslint-disable-next-line cypress/no-unnecessary-waiting
+    cy.wait(ONE_SECOND);
+    cy.do(Select('Search field index').choose('Subjects'));
+  },
+  searchBySourceHolding: (source) => {
+    cy.do(Button({ id: 'accordion-toggle-button-holdingsSource' }).click());
+    cy.do(Checkbox(source).click());
+  },
+  selectBrowseContributors() {
+    this.switchToBrowseTab();
+    // cypress can not pick up an option without wait
+    // eslint-disable-next-line cypress/no-unnecessary-waiting
+    cy.wait(ONE_SECOND);
+    cy.do(Select('Search field index').choose('Contributors'));
+  },
+
+  selectBrowseOtherScheme() {
+    this.switchToBrowseTab();
+    // cypress can't draw selected option without wait
+    // eslint-disable-next-line cypress/no-unnecessary-waiting
+    cy.wait(ONE_SECOND);
+    cy.do(browseSearchAndFilterInput.choose('Other scheme'));
+  },
+
+  selectBrowseDeweyDecimal() {
+    this.switchToBrowseTab();
+    // cypress can't draw selected option without wait
+    // eslint-disable-next-line cypress/no-unnecessary-waiting
+    cy.wait(ONE_SECOND);
+    cy.do(browseSearchAndFilterInput.choose('Dewey Decimal classification'));
+  },
+
+  showsOnlyNameTypeAccordion() {
+    cy.expect(Accordion({ id: 'nameType' }).exists());
+    cy.expect(Accordion({ id: 'effectiveLocation' }).absent());
+    cy.expect(Accordion({ id: 'language' }).absent());
+    cy.expect(Accordion({ id: 'resource' }).absent());
+    cy.expect(Accordion({ id: 'format' }).absent());
+    cy.expect(Accordion({ id: 'mode' }).absent());
+    cy.expect(Accordion({ id: 'natureOfContent' }).absent());
+    cy.expect(Accordion({ id: 'staffSuppress' }).absent());
+    cy.expect(Accordion({ id: 'instancesDiscoverySuppress' }).absent());
+    cy.expect(Accordion({ id: 'statisticalCodeIds' }).absent());
+    cy.expect(Accordion({ id: 'createdDate' }).absent());
+    cy.expect(Accordion({ id: 'updatedDate' }).absent());
+    cy.expect(Accordion({ id: 'source' }).absent());
+    cy.expect(Accordion({ id: 'instancesTags' }).absent());
+  },
+
+  showsOnlyEffectiveLocation() {
+    cy.expect(Accordion({ id: 'effectiveLocation' }).exists());
+    cy.expect(Accordion({ id: 'language' }).absent());
+    cy.expect(Accordion({ id: 'resource' }).absent());
+    cy.expect(Accordion({ id: 'format' }).absent());
+    cy.expect(Accordion({ id: 'mode' }).absent());
+    cy.expect(Accordion({ id: 'natureOfContent' }).absent());
+    cy.expect(Accordion({ id: 'staffSuppress' }).absent());
+    cy.expect(Accordion({ id: 'instancesDiscoverySuppress' }).absent());
+    cy.expect(Accordion({ id: 'statisticalCodeIds' }).absent());
+    cy.expect(Accordion({ id: 'createdDate' }).absent());
+    cy.expect(Accordion({ id: 'updatedDate' }).absent());
+    cy.expect(Accordion({ id: 'source' }).absent());
+    cy.expect(Accordion({ id: 'instancesTags' }).absent());
+  },
+
+  filtersIsAbsent() {
+    cy.expect(Accordion({ id: 'effectiveLocation' }).absent());
+    cy.expect(Accordion({ id: 'language' }).absent());
+    cy.expect(Accordion({ id: 'resource' }).absent());
+    cy.expect(Accordion({ id: 'format' }).absent());
+    cy.expect(Accordion({ id: 'mode' }).absent());
+    cy.expect(Accordion({ id: 'natureOfContent' }).absent());
+    cy.expect(Accordion({ id: 'staffSuppress' }).absent());
+    cy.expect(Accordion({ id: 'instancesDiscoverySuppress' }).absent());
+    cy.expect(Accordion({ id: 'statisticalCodeIds' }).absent());
+    cy.expect(Accordion({ id: 'createdDate' }).absent());
+    cy.expect(Accordion({ id: 'updatedDate' }).absent());
+    cy.expect(Accordion({ id: 'source' }).absent());
+    cy.expect(Accordion({ id: 'instancesTags' }).absent());
+  },
+
+  verifyBrowseOptions() {
+    cy.do(browseSearchAndFilterInput.click());
+    // eslint-disable-next-line no-unused-vars
+    Object.entries(BROWSE_CALL_NUMBER_OPTIONS).forEach(([key, value]) => {
+      cy.expect(browseSearchAndFilterInput.has({ content: including(value) }));
+    });
+    cy.expect([
+      browseSearchAndFilterInput.has({ content: including('Contributors') }),
+      browseSearchAndFilterInput.has({ content: including('Subjects') }),
+    ]);
+  },
+
+  verifyKeywordsAsDefault() {
+    cy.get('#input-record-search-qindex').then((elem) => {
+      expect(elem.text()).to.include('Select a browse option');
+    });
+    cy.expect(browseSearchAndFilterInput.exists());
+  },
+
+  switchToBrowseTab() {
+    cy.wait(1000);
+    cy.do(browseButton.click());
+  },
+
+  verifySpecificTabHighlighted(tab) {
+    cy.expect(Button(`${tab}`).has({ default: false }));
+  },
+
+  verifyCallNumberBrowseEmptyPane() {
+    cy.expect(callNumberBrowsePane.exists());
+    cy.expect(
+      callNumberBrowsePane.has({
+        subtitle: 'Enter search criteria to start browsing',
+      }),
+    );
+    cy.expect(
+      HTML(including('Browse for results entering a query or choosing a filter.')).exists(),
+    );
+  },
+
+  verifyCallNumberBrowseNotEmptyPane() {
+    cy.expect([
+      callNumberBrowsePane.exists(),
+      Pane({ subtitle: 'Enter search criteria to start browsing' }).absent(),
+      HTML(including('Browse for results entering a query or choosing a filter.')).absent(),
+    ]);
+  },
+
+  verifyCallNumberBrowsePane() {
+    cy.expect(callNumberBrowsePane.exists());
+  },
+
+  verifySubjectsResultsInBrowsePane() {
+    cy.expect(
+      callNumberBrowsePane
+        .find(MultiColumnList({ id: 'browse-results-list-browseSubjects' }))
+        .find(MultiColumnListRow({ indexRow: 'row-0' }))
+        .exists(),
+    );
+  },
+
+  verifyCallNumbersResultsInBrowsePane(item) {
+    cy.expect(callNumberBrowsePane.find(browseResultList).find(MultiColumnListCell(item)).exists());
+  },
+
+  saveUUIDs() {
+    InventoryActions.open();
+    cy.do(InventoryActions.options.saveUUIDs.click());
+  },
+  saveHoldingsUUIDs() {
+    InventoryActions.open();
+    cy.do(InventoryActions.options.saveHoldingsUUIDs.click());
+  },
+  saveCQLQuery() {
+    InventoryActions.open();
+    cy.do(InventoryActions.options.saveCQLQuery.click());
+  },
+
+  exportInstanceAsMarc() {
+    InventoryActions.open();
+    cy.do(InventoryActions.options.exportMARC.click());
+  },
+
+  showSelectedRecords() {
+    InventoryActions.open();
+    cy.do(InventoryActions.options.showSelectedRecords.click());
+  },
+
+  getUUIDsFromRequest(req) {
+    const expectedUUIDs = [];
+    req.response.body.ids.forEach((elem) => {
+      expectedUUIDs.push(elem.id);
+    });
+    return expectedUUIDs;
+  },
+
+  verifySelectedRecords(selected) {
+    if (selected === 1) {
+      cy.expect(
+        Pane('Inventory').is({
+          subtitle: including(`record found${selected} record selected`),
+        }),
+      );
+    } else {
+      cy.expect(
+        Pane('Inventory').is({
+          subtitle: including(`records found${selected} records selected`),
+        }),
+      );
+    }
+  },
+
+  searchByParameter: (parameter, value) => {
+    cy.do(SearchField({ id: 'input-inventory-search' }).selectIndex(parameter));
+    cy.do(keywordInput.fillIn(value));
+    cy.do(searchButton.focus());
+    cy.do(searchButton.click());
+  },
+  switchToItem: () => cy.do(itemToggleButton.click()),
+  switchToHoldings: () => cy.do(holdingsToggleButton.click()),
+  switchToInstance: () => cy.do(navigationInstancesButton.click()),
+
+  instanceTabIsDefault() {
+    cy.do(
+      navigationInstancesButton.perform((element) => {
+        expect(element.classList[2]).to.include('primary');
+      }),
+    );
+  },
+
+  browseSubjectsSearch(searchString = 'test123') {
+    cy.do([
+      browseButton.click(),
+      browseSearchInputField.fillIn(searchString),
+      searchButton.click(),
+    ]);
+    cy.expect(Pane({ id: 'browse-inventory-results-pane' }).find(MultiColumnListHeader()).exists());
+  },
+
+  verifySearchResult: (cellContent, isFound = true) => {
+    if (isFound) cy.expect(MultiColumnListCell({ content: cellContent }).exists());
+    else cy.expect(MultiColumnListCell({ content: cellContent }).absent());
+  },
+
+  verifyContentNotExistInSearchResult: (cellContent) => cy.expect(MultiColumnListCell({ content: cellContent }).absent()),
+
+  getInstancesByIdentifierViaApi(identifier, limit = 100) {
+    return cy
+      .okapiRequest({
+        method: 'GET',
+        path: 'search/instances',
+        searchParams: {
+          limit,
+          highlightMatch: true,
+          query: `(identifiers.value="${identifier}" or isbn="${identifier}") sortby title`,
+        },
+        isDefaultSearchParamsRequired: false,
+      })
+      .then(({ body: { instances } }) => {
+        return instances;
+      });
+  },
+
+  getInstancesBySubjectViaApi(subject, limit = 100) {
+    return cy
+      .okapiRequest({
+        method: 'GET',
+        path: 'search/instances',
+        searchParams: {
+          limit,
+          highlightMatch: true,
+          query: `(subjects="${subject}") sortby title`,
+        },
+        isDefaultSearchParamsRequired: false,
+      })
+      .then(({ body: { instances } }) => {
+        return instances;
+      });
+  },
+
+  selectSearchOptions(searchOption, text) {
+    cy.do([
+      inventorySearchAndFilterInput.choose(searchOption),
+      inventorySearchAndFilter.fillIn(text),
+    ]);
+  },
+
+  executeSearch(text) {
+    cy.do(inventorySearchAndFilter.fillIn(text));
+    this.clickSearch();
+  },
+
+  verifySelectedSearchOption(option) {
+    cy.expect(inventorySearchAndFilterInput.has({ value: option }));
+  },
+
+  clickSearch() {
+    cy.do(searchButton.click());
+  },
+
+  clickMarcAuthIcon() {
+    cy.window().then((win) => {
+      cy.stub(win, 'open')
+        .callsFake((url) => {
+          cy.visit(url);
+        })
+        .as('windowOpen');
+    });
+
+    cy.get("[data-link='authority-app']").eq(0).click();
+  },
+
+  checkContributorRequest() {
+    cy.intercept('GET', '/search/instances?*').as('getInstances');
+    this.clickSearch();
+    cy.wait('@getInstances').then((interception) => {
+      // checking that request contains '=' after 'contributors.name'
+      expect(interception.request.url).to.include('contributors.name%3D');
+    });
+  },
+
+  resetAll() {
+    cy.do(resetAllButton.click());
+  },
+
+  clickResetAllButton() {
+    cy.do(searchAndFilterSection.find(resetAllBtn).click());
+  },
+
+  clickNextPaginationButton() {
+    cy.do(inventorySearchResultsPane.find(nextButton).click());
+  },
+
+  clickListInventoryNextPaginationButton() {
+    cy.do(listInventoryNextPagingButton.click());
+  },
+
+  clickPreviousPaginationButton() {
+    cy.do(inventorySearchResultsPane.find(previousButton).click());
+  },
+
+  clickListInventoryPreviousPaginationButton() {
+    cy.do(listInventoryPreviousPagingButton.click());
+  },
+
+  checkContributorsColumResult(cellContent) {
+    cy.expect(
+      MultiColumnList({ id: 'list-inventory' })
+        .find(MultiColumnListCell(including(cellContent)))
+        .exists(),
+    );
+  },
+
+  checkMarcAuthAppIconInSearchResult() {
+    cy.get('[alt="MARC Authorities module"]').should('have.length.at.least', 1);
+  },
+
+  checkMissingSearchResult(cellContent) {
+    cy.expect(MultiColumnListCell({ content: cellContent }).absent());
+  },
+
+  verifyIsFilteredByTag(instanceTitle) {
+    cy.expect(MultiColumnListCell({ row: 0, content: instanceTitle }).exists());
+    cy.expect(MultiColumnList({ id: 'list-inventory' }).has({ rowCount: 1 }));
+  },
+
+  searchTag(tag) {
+    cy.do([tagsAccordionButton.click(), instancesTagsSection.find(TextField()).fillIn(tag)]);
+  },
+
+  filterByTag(tag) {
+    this.searchTag(tag);
+    cy.do(instancesTagsSection.find(Checkbox(tag)).click());
+  },
+
+  verifyTagIsAbsent(tag) {
+    this.searchTag(tag);
+    cy.expect(HTML('No matching options').exists());
+  },
+
+  verifyContributorsColumResult(cellContent) {
+    cy.expect(
+      MultiColumnList({ id: 'browse-results-list-contributors' })
+        .find(MultiColumnListCell(including(cellContent)))
+        .exists(),
+    );
+  },
+
+  verifyResultPaneEmpty({ noResultsFound = false, searchQuery = '(?:\\S+)' } = {}) {
+    const message = noResultsFound
+      ? `No results found for "${searchQuery}". Please check your spelling and filters.`
+      : emptyResultsMessage;
+
+    cy.expect(
+      paneResultsSection
+        .find(HTML({ className: including('noResultsMessage-') }))
+        .has({ text: matching(message) }),
+    );
+  },
+
+  resetAllAndVerifyNoResultsAppear() {
+    cy.do(resetAllButton.click());
+    cy.expect(paneResultsSection.find(HTML(including(emptyResultsMessage))).exists());
+  },
+
+  closeInstanceDetailPane() {
+    cy.do(instanceDetailsSection.find(Button({ icon: 'times' })).click());
+    cy.expect(instanceDetailsSection.absent());
+    cy.expect(tagsPane.absent());
+  },
+
+  verifyTagCount(count = '0') {
+    cy.expect(tagsButton.find(HTML(including(count))).exists());
+  },
+
+  addTag(tag) {
+    cy.intercept('PUT', '**/inventory/instances/**').as('addTag');
+    cy.do([
+      MultiSelect({ id: 'input-tag' }).fillIn(tag),
+      MultiSelect().open(),
+      MultiSelectOption(including(tag)).click(),
+    ]);
+    cy.wait('@addTag');
+  },
+
+  verifyTagsView() {
+    cy.expect(tagsPane.exists());
+    // needs some waiting until request payload is gathered
+    // otherwise, UI throws "Permissions" error
+    // eslint-disable-next-line cypress/no-unnecessary-waiting
+    cy.wait(1200);
+  },
+
+  openTagsField() {
+    cy.do(tagsButton.click());
+  },
+
+  verifyInstanceDetailsView() {
+    cy.expect(instanceDetailsSection.exists());
+  },
+
+  selectFoundInstance(instanceTitle) {
+    cy.do(MultiColumnListCell({ row: 0, content: instanceTitle }).click());
+  },
+
+  selectFoundItem(callNumber, suffix) {
+    cy.do(Button(including(`${callNumber} ${suffix}`)).click());
+  },
+
+  selectFoundItemFromBrowseResultList(value) {
+    cy.do(Button(including(value)).click());
+    cy.expect(instanceDetailsSection.exists());
+  },
+
+  verifyInstanceDisplayed(instanceTitle, byInnerText = false) {
+    if (byInnerText) {
+      cy.expect(MultiColumnListCell({ innerText: instanceTitle }).exists());
+    } else {
+      cy.expect(MultiColumnListCell({ content: instanceTitle }).exists());
+    }
+  },
+
+  verifyShelvingOrder(val) {
+    cy.get('#input-inventory-search-qindex').then((elem) => {
+      expect(elem.text()).to.include('Effective call number (item), shelving order');
+    });
+    cy.expect(inventorySearchAndFilter.has({ value: val }));
+  },
+
+  verifyPanesExist() {
+    cy.expect(paneFilterSection.exists());
+    cy.expect(paneResultsSection.exists());
+  },
+
+  selectViewHoldings: () => cy.do(viewHoldingButton.click()),
+
+  filterItemByStatisticalCode: (code) => {
+    cy.do(Button({ id: 'accordion-toggle-button-itemsStatisticalCodeIds' }).click());
+    // need to wait until data will be loaded
+    cy.wait(ONE_SECOND);
+    cy.do(statisticalCodeAccordion.find(TextField()).fillIn(code));
+    // need to wait until data will be loaded
+    cy.wait(ONE_SECOND);
+    statisticalCodeAccordion.find(TextField()).click();
+    cy.do(statisticalCodeAccordion.find(Checkbox(code)).click());
+  },
+
+  browseSearch(searchValue) {
+    cy.do([browseSearchInputField.fillIn(searchValue), searchButton.click()]);
+  },
+
+  clickEditInstance() {
+    cy.do([instanceDetailsSection.find(actionsButton).click(), editInstanceButton.click()]);
+  },
+
+  verifyActionButtonOptions() {
+    cy.do(paneResultsSection.find(actionsButton).click());
+    cy.expect([Button('New').exists(), DropdownMenu().find(HTML('Show columns')).exists()]);
+  },
+
+  verifyNoExportJsonOption() {
+    paneResultsSection.find(actionsButton);
+    cy.expect(Button('Export instances (JSON)').absent());
+  },
+
+  filterHoldingsByPermanentLocation: (location) => {
+    cy.do(Button({ id: 'accordion-toggle-button-holdingsPermanentLocation' }).click());
+    // need to wait until data will be loaded
+    cy.wait(ONE_SECOND);
+    cy.do(holdingsPermanentLocationAccordion.find(TextField()).fillIn(location));
+    // need to wait until data will be loaded
+    cy.wait(ONE_SECOND);
+    holdingsPermanentLocationAccordion.find(TextField()).click();
+    cy.do(holdingsPermanentLocationAccordion.find(Checkbox(location)).click());
+  },
+
+  checkRowsCount: (expectedRowsCount) => {
+    cy.expect([
+      instancesList.find(MultiColumnListRow({ index: expectedRowsCount - 1 })).exists(),
+      instancesList.find(MultiColumnListRow({ index: expectedRowsCount })).absent(),
+    ]);
+  },
+
+  switchToSearchTab() {
+    cy.do(searchToggleButton.click());
+    cy.expect(effectiveLocationInput.exists());
+  },
+
+  verifySearchToggleButtonSelected: () => cy.expect(searchToggleButton.has({ default: false })),
+  verifySearchButtonDisabled: () => cy.expect(searchButton.has({ disabled: true })),
+  verifyResetAllButtonDisabled: (isDisabled) => cy.expect(resetAllBtn.has({ disabled: isDisabled })),
+  verifyBrowseInventorySearchResults({ records = [] } = {}) {
+    cy.expect(inventorySearchResultsPane.exists());
+
+    records.forEach((record) => {
+      cy.expect(
+        inventorySearchResultsPane
+          .find(
+            MultiColumnListCell({ innerHTML: including(`<strong>${record.callNumber}</strong>`) }),
+          )
+          .exists(),
+      );
+    });
+  },
+
+  verifySearchAndResetAllButtonsDisabled(state) {
+    cy.expect([searchButton.has({ disabled: state }), resetAllBtn.has({ disabled: state })]);
+  },
+
+  verifyNoRecordsFound() {
+    cy.expect([
+      paneResultsSection.find(HTML(including('No results found for'))).exists(),
+      instancesList.absent(),
+    ]);
+  },
+
+  verifyResultListExists(isExist = true) {
+    cy.expect(isExist ? instancesList.exists() : instancesList.absent());
+  },
+
+  verifyInstanceDetailsViewAbsent() {
+    cy.expect(instanceDetailsSection.absent());
+  },
+
+  searchByStatus(status) {
+    cy.do([
+      Button({ id: 'accordion-toggle-button-itemStatus' }).click(),
+      itemStatusSearchField.fillIn(status),
+      Checkbox(status).click(),
+    ]);
+  },
+
+  selectBrowseOption(option) {
+    cy.do(browseSearchAndFilterInput.choose(option));
+  },
+
+  checkSearchQueryText(text) {
+    cy.expect(keywordInput.has({ value: text }));
+  },
+
+  browseOptionsDropdownIncludesOptions(options) {
+    const browseOptionsDropdown = Select('Search field index');
+    this.switchToBrowseTab();
+    options.forEach((name) => {
+      cy.expect(browseOptionsDropdown.has({ content: including(name) }));
+    });
+  },
+
+  searchTabIsDefault() {
+    cy.do(
+      searchToggleButton.perform((element) => {
+        expect(element.classList[2]).to.include('primary');
+      }),
+    );
+  },
+
+  verifySearchAndFilterPane() {
+    this.searchTabIsDefault();
+    this.instanceTabIsDefault();
+    this.searchTypeDropdownDefaultValue('all');
+    this.verifySearchFieldIsEmpty();
+    cy.expect([
+      searchToggleButton.exists(),
+      browseButton.exists(),
+      holdingsToggleButton.exists(),
+      itemToggleButton.exists(),
+      searchButton.has({ disabled: true }),
+      resetAllButton.has({ disabled: true }),
+      effectiveLocationInput.has({ open: false }),
+      languageInput.has({ open: false }),
+      resourceTypeAccordion.has({ open: false }),
+      formatAccordion.has({ open: false }),
+      modeOfIssuanceAccordion.has({ open: false }),
+      natureOfContentAccordion.has({ open: false }),
+      supressFromDiscoveryAccordion.has({ open: false }),
+      statisticalCodeAccordionInstanceToggle.has({ open: false }),
+      dateCreatedAccordion.has({ open: false }),
+      dateUpdatedAccordion.has({ open: false }),
+      instanceStatusAccordion.has({ open: false }),
+      sourceAccordion.has({ open: false }),
+      tagsAccordion.has({ open: false }),
+    ]);
+  },
+
+  verifySearchAndFilterPaneBrowseToggle() {
+    this.verifyKeywordsAsDefault();
+    this.verifyCallNumberBrowseEmptyPane();
+    cy.expect([
+      searchButton.has({ disabled: true }),
+      resetAllBtn.has({ disabled: true }),
+      actionsButton.absent(),
+    ]);
+  },
+
+  searchTypeDropdownDefaultValue(value) {
+    cy.expect(searchTypeDropdown.has({ value }));
+  },
+
+  verifySearchFieldIsEmpty() {
+    cy.expect(keywordInput.has({ value: '' }));
+  },
+
+  verifyAccordionExistance(accordionName) {
+    cy.expect(Accordion(accordionName).exists());
+  },
+
+  verifyAccordionByNameExpanded(accordionName, status = true) {
+    cy.expect(Accordion(accordionName).has({ open: status }));
+  },
+
+  clickAccordionByName(accordionName) {
+    cy.do(Accordion(accordionName).clickHeader());
+  },
+
+  verifyFilterOptionCount(accordionName, optionName, expectedCount) {
+    cy.expect(
+      Accordion(accordionName)
+        .find(
+          HTML({ className: including('checkbox---'), text: `${optionName}\n${expectedCount}` }),
+        )
+        .exists(),
+    );
+  },
+
+  verifyCheckboxInAccordion(accordionName, checkboxValue, isChecked = null) {
+    cy.expect(Accordion(accordionName).find(Checkbox(checkboxValue)).exists());
+    if (isChecked !== null) cy.expect(Accordion(accordionName).find(Checkbox(checkboxValue)).has({ checked: isChecked }));
+  },
+
+  verifyTextFieldInAccordion(accordionName, textFieldValue) {
+    cy.expect(
+      Accordion(accordionName)
+        .find(TextField({ value: including(textFieldValue) }))
+        .exists(),
+    );
+  },
+
+  verifyNameTypeOption(option) {
+    cy.do(nameTypeAccordion.find(Button({ ariaLabel: 'open menu' })).click());
+    cy.expect(nameTypeAccordion.find(MultiSelectOption(including(option))).exists());
+  },
+
+  selectOptionInExpandedFilter(accordionName, optionName, selected = true) {
+    const checkbox = Accordion(accordionName).find(Checkbox(optionName));
+    cy.do(checkbox.click());
+    // wait for facet options to reload in all facets
+    cy.wait(ONE_SECOND);
+    cy.expect(checkbox.has({ checked: selected }));
+  },
+
+  checkSearchButtonEnabled() {
+    cy.expect(searchButton.has({ disabled: false }));
+  },
+
+  varifyInstanceKeyDetails(instanceData) {
+    cy.wait(4000);
+    cy.expect([
+      Section({ id: 'acc01' }).find(KeyValue('Instance HRID')).has({ value: instanceData.hrid }),
+      Section({ id: 'acc01' }).find(KeyValue('Source')).has({ value: instanceData.source }),
+      Section({ id: 'acc02' }).find(KeyValue('Resource title')).has({ value: instanceData.title }),
+    ]);
+  },
+
+  expandAccordion(accordionName) {
+    cy.do(paneFilterSection.find(Accordion(accordionName)).clickHeader());
+    cy.expect(paneFilterSection.find(Accordion(accordionName)).has({ open: true }));
+  },
+
+  checkOptionsWithCountersExistInAccordion(accordionName) {
+    cy.expect(
+      paneFilterSection
+        .find(Accordion(accordionName))
+        .find(Checkbox())
+        .has({ label: matching(/.{1,}\d{1,}/) }),
+    );
+  },
+
+  checkBrowseOptionDropdownInFocus() {
+    cy.expect(Select({ id: 'input-record-search-qindex' }).has({ focused: true }));
+  },
+
+  clickEffectiveLocationAccordionToggleButton() {
+    cy.do(effectiveLocationInput.clickHeader());
+  },
+
+  clickEffectiveLocationAccordionInput() {
+    cy.get('input[type=search]').click();
+  },
+
+  checkEffectiveLocationAccordionInputInFocus() {
+    cy.expect(TextField({ type: 'search' }).has({ focused: true }));
+  },
+
+  checkBrowseSearchInputFieldContent(text) {
+    cy.expect(browseSearchInputField.has({ textContent: text }));
+  },
+
+  checkBrowseSearchInputFieldInFocus(isFocused) {
+    cy.expect(browseSearchInputField.has({ focused: isFocused }));
+  },
+
+  checkBrowseInventoryResultPaneInFocus(isFocused) {
+    cy.expect(
+      PaneHeader({ id: 'paneHeaderbrowse-inventory-results-pane' }).has({ focused: isFocused }),
+    );
+  },
+
+  checkBrowseResultListCallNumbersExists(isExist) {
+    if (isExist) {
+      cy.expect(browseResultList.exists());
+    } else {
+      cy.expect(browseResultList.absent());
+    }
+  },
+
+  checkBrowseOptionSelected(option) {
+    cy.expect(browseSearchAndFilterInput.has({ checkedOptionText: option }));
+  },
+
+  clearFilter(accordionName) {
+    cy.do(Button({ ariaLabel: `Clear selected filters for "${accordionName}"` }).click());
+  },
+
+  checkSharedInstancesInResultList() {
+    return cy
+      .get('div[class^="mclRowContainer--"]')
+      .find('[class*="mclCell-"]:nth-child(2)')
+      .each(($cell) => {
+        cy.wrap($cell).find('span[class*="sharedIcon"]').should('exist');
+      });
+  },
+
+  checkNoSharedInstancesInResultList() {
+    cy.expect(MultiColumnListCell(including('sharedIcon')).absent());
+  },
+
+  checkSharedAndLocalInstancesInResultList() {
+    return cy
+      .get('div[class^="mclRowContainer--"]')
+      .find('[class*="mclCell-"]:nth-child(2)')
+      .then(($allInstances) => {
+        const totalNumberOfInstances = $allInstances.length;
+        cy.wrap($allInstances)
+          .find('span[class*="sharedIcon"]')
+          .then(($sharedInstances) => {
+            const numberOfSharedInstances = $sharedInstances.length;
+
+            expect(totalNumberOfInstances).not.to.eq(numberOfSharedInstances);
+          });
+      });
+  },
+
+  selectYesfilterStaffSuppress: () => {
+    cy.do([
+      stuffSupressAccordion.clickHeader(),
+      stuffSupressAccordion.find(Checkbox({ id: 'clickable-filter-staffSuppress-true' })).click(),
+    ]);
+  },
+};

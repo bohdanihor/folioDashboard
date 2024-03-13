@@ -1,0 +1,90 @@
+import uuid from 'uuid';
+import getRandomPostfix from '../../utils/stringTools';
+
+const getDefaultOrganization = ({
+  id = uuid(),
+  isDonor = false,
+  isVendor = true,
+  accounts = 0,
+  claimingInterval,
+} = {}) => {
+  const defaultUiOrganizations = {
+    id,
+    name: `autotest_name_${getRandomPostfix()}`,
+    status: 'Active',
+    code: `autotest_code_${getRandomPostfix()}`,
+    erpCode: getRandomPostfix(),
+    isDonor,
+    isVendor,
+    claimingInterval,
+    accounts: [...Array(accounts).keys()].map((index) => ({
+      accountNo: getRandomPostfix(),
+      accountStatus: 'Active',
+      acqUnitIds: [],
+      appSystemNo: '',
+      description: 'Main library account',
+      libraryCode: 'COB',
+      libraryEdiCode: getRandomPostfix(),
+      name: `autotest_account_${index + 1}`,
+      notes: '',
+      paymentMethod: 'Cash',
+    })),
+  };
+  return defaultUiOrganizations;
+};
+
+export default {
+  getDefaultOrganization,
+
+  defaultUiOrganizations: {
+    name: `autotest_name_${getRandomPostfix()}`,
+    status: 'Active',
+    code: `autotest_code_${getRandomPostfix()}`,
+    isVendor: true,
+    erpCode: `ERP-${getRandomPostfix()}`,
+  },
+
+  createViaApi: (organizationProperties) => {
+    return cy
+      .okapiRequest({
+        path: 'organizations/organizations',
+        body: organizationProperties,
+        method: 'POST',
+      })
+      .then((response) => {
+        return response.body;
+      });
+  },
+
+  specialOrganization: {
+    name: `autotest_name_${getRandomPostfix()}`,
+    status: 'Active',
+    code: `autotest_code_${getRandomPostfix()}`,
+    isVendor: true,
+    paymentMethod: 'Cash',
+    taxId: uuid(),
+    description: `autotest_description_${getRandomPostfix()}`,
+    erpCode: getRandomPostfix(),
+    language: 'eng',
+    aliases: [
+      {
+        description: 'alias_description',
+        value: 'alias',
+      },
+    ],
+    addresses: [
+      {
+        country: 'USA',
+      },
+    ],
+  },
+
+  defaultContact: {
+    firstName: `AT_FN_${getRandomPostfix()}`,
+    lastName: `AT_LN_${getRandomPostfix()}`,
+  },
+
+  defaultInterface: {
+    name: `AIN_${getRandomPostfix()}`,
+  },
+};
