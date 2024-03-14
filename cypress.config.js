@@ -13,6 +13,7 @@ module.exports = defineConfig({
     runMode: 0,
     openMode: 0,
   },
+  projectId: 'qm4gg2',
   numTestsKeptInMemory: 1,
   viewportWidth: 1920,
   viewportHeight: 1080,
